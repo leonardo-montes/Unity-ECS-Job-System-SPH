@@ -1,11 +1,10 @@
+![](https://imgur.com/a/Zc4xOFA)
 # Unity (ECS/Job System) SPH
 Implementation of the SPH Algorithm (fluid simulation) in Unity, comparing singlethread and ECS/Job System performances.
 
 Using Unity 2018.2.19f0
 
 More info in this article: https://medium.com/@leomontes_60748/how-to-implement-a-fluid-simulation-on-the-cpu-with-unity-ecs-job-system-bf90a0f2724f
-
-[![Unity ECS/Job System: SPH (Fluid Simulation)](https://img.youtube.com/vi/ehzfa0WgLEw/0.jpg)](https://www.youtube.com/watch?v=ehzfa0WgLEw "Unity ECS/Job System: SPH (Fluid Simulation)")
 
 
 ### How to:
