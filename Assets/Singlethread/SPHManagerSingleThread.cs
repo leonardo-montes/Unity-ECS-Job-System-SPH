@@ -48,10 +48,6 @@ public class SPHManagerSingleThread : MonoBehaviour
         public float gravityMult;
         public float particleMass;
         public float particleViscosity;
-        public float targetAttraction;
-        public float targetAttractionY;
-        public float targetMaxForce;
-        public float targetMaxForceY;
         public float particleDrag;
     }
 
@@ -125,7 +121,7 @@ public class SPHManagerSingleThread : MonoBehaviour
         {
             float jitter = (Random.value * 2f - 1f) * parameters[parameterID].particleRadius * 0.1f;
             float x = (i % rowSize) + Random.Range(-0.1f, 0.1f);
-            float y = (float)((i / rowSize) / rowSize) * 1.1f;
+            float y = 2 + (float)((i / rowSize) / rowSize) * 1.1f;
             float z = ((i / rowSize) % rowSize) + Random.Range(-0.1f, 0.1f);
 
             GameObject go = Instantiate(character0Prefab);

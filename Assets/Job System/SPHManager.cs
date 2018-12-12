@@ -4,7 +4,8 @@ using Unity.Mathematics;
 using Unity.Transforms;
 using Unity.Collections;
 
-public class SPHManager : MonoBehaviour {
+public class SPHManager : MonoBehaviour
+{
 
     // Import
     [Header("Import")]
