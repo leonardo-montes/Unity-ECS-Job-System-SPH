@@ -1,5 +1,4 @@
 ﻿using Unity.Entities;
-using Unity.Mathematics;
 
 [System.Serializable]
 public struct SPHParticle : ISharedComponentData
@@ -17,4 +16,4 @@ public struct SPHParticle : ISharedComponentData
     public float drag;
 }
 
-public class SPHParticleComponent : SharedComponentDataWrapper<SPHParticle> { }
+public class SPHParticleComponent : SharedComponentDataProxy<SPHParticle> { }

@@ -7,12 +7,15 @@ using Unity.Entities;
 using Unity.Burst;
 using Unity.Jobs;
 
-[UpdateBefore(typeof(TransformSystem))]
+[UpdateBefore(typeof(TransformSystemGroup))]
 public class SPHSystem : JobComponentSystem
 {
 
-    private ComponentGroup SPHCharacterGroup;
-    private ComponentGroup SPHColliderGroup;
+    private EntityQuery SPHCharacterGroup;
+    private EntityQuery SPHColliderGroup;
+
+    private JobHandle collidersToNativeArrayJobHandle;
+    private NativeArray<SPHCollider> colliders;
 
     private Transform cameraTransform;
 
@@ -30,8 +33,9 @@ public class SPHSystem : JobComponentSystem
 
     private struct PreviousParticle
     {
+        #pragma warning disable 0649
         public NativeMultiHashMap<int, int> hashMap;
-        public NativeArray<Position> particlesPosition;
+        public NativeArray<Translation> particlesPosition;
         public NativeArray<SPHVelocity> particlesVelocity;
         public NativeArray<float3> particlesForces;
         public NativeArray<float> particlesPressure;
@@ -39,7 +43,7 @@ public class SPHSystem : JobComponentSystem
         public NativeArray<int> particleIndices;
 
         public NativeArray<int> cellOffsetTable;
-        public NativeArray<SPHCollider> copyColliders;
+        #pragma warning restore 0649
     }
 
 
@@ -47,10 +51,12 @@ public class SPHSystem : JobComponentSystem
     [BurstCompile]
     private struct HashPositions : IJobParallelFor
     {
+        #pragma warning disable 0649
         [ReadOnly] public float cellRadius;
 
-        public NativeArray<Position> positions;
-        public NativeMultiHashMap<int, int>.Concurrent hashMap;
+        public NativeArray<Translation> positions;
+        public NativeMultiHashMap<int, int>.ParallelWriter hashMap;
+        #pragma warning restore 0649
 
         public void Execute(int index)
         {
@@ -59,7 +65,7 @@ public class SPHSystem : JobComponentSystem
             int hash = GridHash.Hash(position, cellRadius);
             hashMap.Add(hash, index);
 
-            positions[index] = new Position { Value = position };
+            positions[index] = new Translation { Value = position };
         }
     }
 
@@ -69,6 +75,7 @@ public class SPHSystem : JobComponentSystem
     private struct MergeParticles : IJobNativeMultiHashMapMergedSharedKeyIndices
     {
         public NativeArray<int> particleIndices;
+        #pragma warning restore 0649
 
 
 
@@ -89,13 +96,15 @@ public class SPHSystem : JobComponentSystem
     [BurstCompile]
     private struct ComputeDensityPressure : IJobParallelFor
     {
+        #pragma warning disable 0649
         [ReadOnly] public NativeMultiHashMap<int, int> hashMap;
         [ReadOnly] public NativeArray<int> cellOffsetTable;
-        [ReadOnly] public NativeArray<Position> particlesPosition;
+        [ReadOnly] public NativeArray<Translation> particlesPosition;
         [ReadOnly] public SPHParticle settings;
 
         public NativeArray<float> densities;
         public NativeArray<float> pressures;
+        #pragma warning restore 0649
 
         private const float PI = 3.14159274F;
         private const float GAS_CONST = 2000.0f;
@@ -148,15 +157,17 @@ public class SPHSystem : JobComponentSystem
     [BurstCompile]
     private struct ComputeForces : IJobParallelFor
     {
+        #pragma warning disable 0649
         [ReadOnly] public NativeMultiHashMap<int, int> hashMap;
         [ReadOnly] public NativeArray<int> cellOffsetTable;
-        [ReadOnly] public NativeArray<Position> particlesPosition;
+        [ReadOnly] public NativeArray<Translation> particlesPosition;
         [ReadOnly] public NativeArray<SPHVelocity> particlesVelocity;
         [ReadOnly] public NativeArray<float> particlesPressure;
         [ReadOnly] public NativeArray<float> particlesDensity;
         [ReadOnly] public SPHParticle settings;
 
         public NativeArray<float3> particlesForces;
+        #pragma warning restore 0649
 
         private const float PI = 3.14159274F;
 
@@ -224,11 +235,13 @@ public class SPHSystem : JobComponentSystem
     [BurstCompile]
     private struct Integrate : IJobParallelFor
     {
+        #pragma warning disable 0649
         [ReadOnly] public NativeArray<float3> particlesForces;
         [ReadOnly] public NativeArray<float> particlesDensity;
 
-        public NativeArray<Position> particlesPosition;
+        public NativeArray<Translation> particlesPosition;
         public NativeArray<SPHVelocity> particlesVelocity;
+        #pragma warning restore 0649
 
         private const float DT = 0.0008f;
 
@@ -246,7 +259,7 @@ public class SPHSystem : JobComponentSystem
 
             // Apply
             particlesVelocity[index] = new SPHVelocity { Value = velocity };
-            particlesPosition[index] = new Position { Value = position };
+            particlesPosition[index] = new Translation { Value = position };
         }
     }
 
@@ -255,11 +268,13 @@ public class SPHSystem : JobComponentSystem
     [BurstCompile]
     private struct ComputeColliders : IJobParallelFor
     {
+        #pragma warning disable 0649
         [ReadOnly] public SPHParticle settings;
         [ReadOnly] public NativeArray<SPHCollider> copyColliders;
 
-        public NativeArray<Position> particlesPosition;
+        public NativeArray<Translation> particlesPosition;
         public NativeArray<SPHVelocity> particlesVelocity;
+        #pragma warning restore 0649
 
         private const float BOUND_DAMPING = -0.5f;
 
@@ -315,38 +330,39 @@ public class SPHSystem : JobComponentSystem
 
             // Apply
             particlesVelocity[index] = new SPHVelocity { Value = velocity };
-            particlesPosition[index] = new Position { Value = position };
+            particlesPosition[index] = new Translation { Value = position };
         }
     }
-
-
-
     [BurstCompile]
-    private struct ApplyPositions : IJobParallelFor
+    private struct ApplyTranslations : IJobForEachWithEntity<Translation, SPHVelocity>
     {
-        [ReadOnly] public NativeArray<Position> particlesPosition;
+        [ReadOnly] public NativeArray<Translation> particlesPosition;
         [ReadOnly] public NativeArray<SPHVelocity> particlesVelocity;
 
-        public ComponentDataArray<Position> positions;
-        public ComponentDataArray<SPHVelocity> velocities;
-
-        public void Execute(int index)
+        public void Execute(Entity entity, int index, ref Translation translation, ref SPHVelocity sphCollider)
         {
-            // Apply to components
-            positions[index] = new Position { Value = particlesPosition[index].Value };
-            velocities[index] = particlesVelocity[index];
+            translation = new Translation { Value = particlesPosition[index].Value };
+            sphCollider = new SPHVelocity { Value = particlesVelocity[index].Value };
         }
     }
+    
 
 
-
-    protected override void OnCreateManager()
+    protected override void OnCreate()
     {
         // Import
-        SPHCharacterGroup = GetComponentGroup(ComponentType.ReadOnly(typeof(SPHParticle)), typeof(Position), typeof(SPHVelocity));
-        SPHColliderGroup = GetComponentGroup(ComponentType.ReadOnly(typeof(SPHCollider)));
+        SPHCharacterGroup = GetEntityQuery(ComponentType.ReadOnly(typeof(SPHParticle)), typeof(Translation), typeof(SPHVelocity));
+        SPHColliderGroup = GetEntityQuery(ComponentType.ReadOnly(typeof(SPHCollider)));
     }
 
+
+
+    protected override void OnStartRunning()
+    {
+        // Get the colliders
+        colliders = SPHColliderGroup.ToComponentDataArray<SPHCollider>(Allocator.Persistent, out collidersToNativeArrayJobHandle);
+    }
+    
 
 
     protected override JobHandle OnUpdate(JobHandle inputDeps)
@@ -356,9 +372,6 @@ public class SPHSystem : JobComponentSystem
 
         EntityManager.GetAllUniqueSharedComponentData(uniqueTypes);
 
-        ComponentDataArray<SPHCollider> colliders = SPHColliderGroup.GetComponentDataArray<SPHCollider>();
-        int colliderCount = colliders.Length;
-
         for (int typeIndex = 1; typeIndex < uniqueTypes.Count; typeIndex++)
         {
             // Get the current chunk setting
@@ -366,23 +379,22 @@ public class SPHSystem : JobComponentSystem
             SPHCharacterGroup.SetFilter(settings);
 
             // Cache the data
-            ComponentDataArray<Position> positions = SPHCharacterGroup.GetComponentDataArray<Position>();
-            ComponentDataArray<SPHVelocity> velocities = SPHCharacterGroup.GetComponentDataArray<SPHVelocity>();
+            JobHandle particlesPositionJobHandle;
+            NativeArray<Translation> particlesPosition = SPHCharacterGroup.ToComponentDataArray<Translation>(Allocator.TempJob, out particlesPositionJobHandle);
+            JobHandle particlesVelocityJobHandle;
+            NativeArray<SPHVelocity> particlesVelocity = SPHCharacterGroup.ToComponentDataArray<SPHVelocity>(Allocator.TempJob, out particlesVelocityJobHandle);
 
             int cacheIndex = typeIndex - 1;
-            int particleCount = positions.Length;
+            int particleCount = particlesPosition.Length;
 
             NativeMultiHashMap<int, int> hashMap = new NativeMultiHashMap<int, int>(particleCount, Allocator.TempJob);
 
-            NativeArray<Position> particlesPosition = new NativeArray<Position>(particleCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            NativeArray<SPHVelocity> particlesVelocity = new NativeArray<SPHVelocity>(particleCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             NativeArray<float3> particlesForces = new NativeArray<float3>(particleCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             NativeArray<float> particlesPressure = new NativeArray<float>(particleCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             NativeArray<float> particlesDensity = new NativeArray<float>(particleCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             NativeArray<int> particleIndices = new NativeArray<int>(particleCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
             NativeArray<int> cellOffsetTableNative = new NativeArray<int>(cellOffsetTable, Allocator.TempJob);
-            NativeArray<SPHCollider> copyColliders = new NativeArray<SPHCollider>(colliderCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
 
 
@@ -396,8 +408,7 @@ public class SPHSystem : JobComponentSystem
                 particlesPressure = particlesPressure,
                 particlesDensity = particlesDensity,
                 particleIndices = particleIndices,
-                cellOffsetTable = cellOffsetTableNative,
-                copyColliders = copyColliders
+                cellOffsetTable = cellOffsetTableNative
             };
 
             if (cacheIndex > previousParticles.Count - 1)
@@ -414,22 +425,12 @@ public class SPHSystem : JobComponentSystem
                 previousParticles[cacheIndex].particlesDensity.Dispose();
                 previousParticles[cacheIndex].particleIndices.Dispose();
                 previousParticles[cacheIndex].cellOffsetTable.Dispose();
-                previousParticles[cacheIndex].copyColliders.Dispose();
             }
             previousParticles[cacheIndex] = nextParticles;
 
 
 
-            // Copy the component data to native arrays
-            CopyComponentData<Position> particlesPositionJob = new CopyComponentData<Position> { Source = positions, Results = particlesPosition };
-            JobHandle particlesPositionJobHandle = particlesPositionJob.Schedule(particleCount, 64, inputDeps);
-
-            CopyComponentData<SPHVelocity> particlesVelocityJob = new CopyComponentData<SPHVelocity> { Source = velocities, Results = particlesVelocity };
-            JobHandle particlesVelocityJobHandle = particlesVelocityJob.Schedule(particleCount, 64, inputDeps);
-
-            CopyComponentData<SPHCollider> copyCollidersJob = new CopyComponentData<SPHCollider> { Source = colliders, Results = copyColliders };
-            JobHandle copyCollidersJobHandle = copyCollidersJob.Schedule(colliderCount, 64, inputDeps);
-
+            // Initialize the empty arrays with a default value
             MemsetNativeArray<float> particlesPressureJob = new MemsetNativeArray<float> { Source = particlesPressure, Value = 0.0f };
             JobHandle particlesPressureJobHandle = particlesPressureJob.Schedule(particleCount, 64, inputDeps);
 
@@ -448,7 +449,7 @@ public class SPHSystem : JobComponentSystem
             HashPositions hashPositionsJob = new HashPositions
             {
                 positions = particlesPosition,
-                hashMap = hashMap.ToConcurrent(),
+                hashMap = hashMap.AsParallelWriter(),
                 cellRadius = settings.radius
             };
             JobHandle hashPositionsJobHandle = hashPositionsJob.Schedule(particleCount, 64, particlesPositionJobHandle);
@@ -501,29 +502,27 @@ public class SPHSystem : JobComponentSystem
             };
             JobHandle integrateJobHandle = integrateJob.Schedule(particleCount, 64, computeForcesJobHandle);
 
-            JobHandle mergedIntegrateCollider = JobHandle.CombineDependencies(integrateJobHandle, copyCollidersJobHandle);
+            JobHandle mergedIntegrateCollider = JobHandle.CombineDependencies(integrateJobHandle, collidersToNativeArrayJobHandle);
 
             // Compute Colliders
             ComputeColliders computeCollidersJob = new ComputeColliders
             {
                 particlesPosition = particlesPosition,
                 particlesVelocity = particlesVelocity,
-                copyColliders = copyColliders,
+                copyColliders = colliders,
                 settings = settings
             };
             JobHandle computeCollidersJobHandle = computeCollidersJob.Schedule(particleCount, 64, mergedIntegrateCollider);
 
-            // Apply positions
-            ApplyPositions applyPositionsJob = new ApplyPositions
+            // Apply translations and velocities
+            ApplyTranslations applyTranslationsJob = new ApplyTranslations
             {
                 particlesPosition = particlesPosition,
-                particlesVelocity = particlesVelocity,
-                positions = positions,
-                velocities = velocities
+                particlesVelocity = particlesVelocity
             };
-            JobHandle applyPositionsJobHandle = applyPositionsJob.Schedule(particleCount, 64, computeCollidersJobHandle);
+            JobHandle applyTranslationsJobHandle = applyTranslationsJob.Schedule(this, computeCollidersJobHandle);
 
-            inputDeps = applyPositionsJobHandle;
+            inputDeps = applyTranslationsJobHandle;
         }
 
         // Done
@@ -535,6 +534,8 @@ public class SPHSystem : JobComponentSystem
 
     protected override void OnStopRunning()
     {
+        EntityManager.CompleteAllJobs();
+
         for (int i = 0; i < previousParticles.Count; i++)
         {
             previousParticles[i].hashMap.Dispose();
@@ -545,8 +546,9 @@ public class SPHSystem : JobComponentSystem
             previousParticles[i].particlesDensity.Dispose();
             previousParticles[i].particleIndices.Dispose();
             previousParticles[i].cellOffsetTable.Dispose();
-            previousParticles[i].copyColliders.Dispose();
         }
+
+        colliders.Dispose();
 
         previousParticles.Clear();
     }

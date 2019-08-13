@@ -1,7 +1,7 @@
 # Unity (ECS/Job System) SPH
 Implementation of the SPH Algorithm (fluid simulation) in Unity, comparing singlethread and ECS/Job System performances.
 
-Using Unity 2018.2.19f0
+Updated to Unity 2019.2!
 
 More info in this article: https://medium.com/@leomontes_60748/how-to-implement-a-fluid-simulation-on-the-cpu-with-unity-ecs-job-system-bf90a0f2724f
 

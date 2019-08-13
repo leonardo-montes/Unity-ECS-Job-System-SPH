@@ -41,6 +41,7 @@ public class SPHManagerSingleThread : MonoBehaviour
     [System.Serializable]
     private struct SPHParameters
     {
+        #pragma warning disable 0649 // This line removes the warning saying that the variable is never assigned to. You can't assign a variable in a struct...
         public float particleRadius;
         public float smoothingRadius;
         public float smoothingRadiusSq;
@@ -49,6 +50,7 @@ public class SPHManagerSingleThread : MonoBehaviour
         public float particleMass;
         public float particleViscosity;
         public float particleDrag;
+        #pragma warning restore 0649
     }
 
 
@@ -79,15 +81,15 @@ public class SPHManagerSingleThread : MonoBehaviour
 
     // Properties
     [Header("Import")]
-    [SerializeField] private GameObject character0Prefab;
+    [SerializeField] private GameObject character0Prefab = null;
 
     [Header("Parameters")]
-    [SerializeField] private int parameterID;
-    [SerializeField] private SPHParameters[] parameters;
+    [SerializeField] private int parameterID = 0;
+    [SerializeField] private SPHParameters[] parameters = null;
 
     [Header("Properties")]
-    [SerializeField] private int amount;
-    [SerializeField] private int rowSize;
+    [SerializeField] private int amount = 250;
+    [SerializeField] private int rowSize = 16;
 
     // Data
     private SPHParticle[] particles;

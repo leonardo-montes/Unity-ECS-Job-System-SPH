@@ -10,4 +10,4 @@ public struct SPHCollider : IComponentData
     public float2 scale;
 }
 
-public class SPHColliderComponent : ComponentDataWrapper<SPHCollider> { }
+public class SPHColliderComponent : ComponentDataProxy<SPHCollider> { }
